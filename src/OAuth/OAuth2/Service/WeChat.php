@@ -2,101 +2,165 @@
 
 namespace OAuth\OAuth2\Service;
 
-use OAuth\OAuth2\Token\StdOAuth2Token;
 use OAuth\Common\Http\Exception\TokenResponseException;
 use OAuth\Common\Http\Uri\Uri;
-use OAuth\Common\Consumer\CredentialsInterface;
-use OAuth\Common\Http\Client\ClientInterface;
-use OAuth\Common\Storage\TokenStorageInterface;
-use OAuth\Common\Http\Uri\UriInterface;
+use OAuth\Common\Token\TokenInterface;
+use OAuth\OAuth2\Token\StdOAuth2Token;
 
 /**
  * Linkedin service.
  *
  * @author Antoine Corcy <contact@sbin.dk>
- * @link http://developer.linkedin.com/documents/authentication
+ * @link   http://developer.linkedin.com/documents/authentication
  */
 class WeChat extends AbstractService
 {
-    /**
-     * Defined scopes
-     * @link http://developer.linkedin.com/documents/authentication#granting
-     */
-    const SCOPE_R_BASICPROFILE      = 'r_basicprofile';
-    const SCOPE_R_FULLPROFILE       = 'r_fullprofile';
-    const SCOPE_R_EMAILADDRESS      = 'r_emailaddress';
-    const SCOPE_R_NETWORK           = 'r_network';
-    const SCOPE_R_CONTACTINFO       = 'r_contactinfo';
-    const SCOPE_RW_NUS              = 'rw_nus';
-    const SCOPE_RW_COMPANY_ADMIN    = 'rw_company_admin';
-    const SCOPE_RW_GROUPS           = 'rw_groups';
-    const SCOPE_W_MESSAGES          = 'w_messages';
 
-    public function __construct(
-        CredentialsInterface $credentials,
-        ClientInterface $httpClient,
-        TokenStorageInterface $storage,
-        $scopes = array(),
-        UriInterface $baseApiUri = null
-    ) {
-        parent::__construct($credentials, $httpClient, $storage, $scopes, $baseApiUri, true);
+	/**
+	 * {@inheritdoc}
+	 */
+	public function getAuthorizationEndpoint()
+	{
+		return new Uri('https://open.weixin.qq.com/connect/oauth2/authorize');
+	}
 
-        if (null === $baseApiUri) {
-            $this->baseApiUri = new Uri('https://open.weixin.qq.com/');
-        }
-    }
+	/**
+	 * {@inheritdoc}
+	 */
+	public function getAccessTokenEndpoint()
+	{
+		return new Uri('https://api.weixin.qq.com/sns/oauth2/access_token');
+	}
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getAuthorizationEndpoint()
-    {
-        return new Uri('https://open.weixin.qq.com/connect/oauth2/authorize');
-    }
+	public function __construct(
+		CredentialsInterface $credentials,
+		ClientInterface $httpClient,
+		TokenStorageInterface $storage,
+		$scopes = array(),
+		UriInterface $baseApiUri = null
+	) {
+		parent::__construct($credentials, $httpClient, $storage, $scopes, $baseApiUri);
 
-    /**
-     * {@inheritdoc}
-     */
-    public function getAccessTokenEndpoint()
-    {
-        return new Uri('https://api.weixin.qq.com/sns/oauth2/access_token');
-    }
+		if (null === $baseApiUri) {
+			$this->baseApiUri = new Uri('https://api.weixin.qq.com/sns/');
+		}
+	}
 
-    /**
-     * {@inheritdoc}
-     */
-    protected function getAuthorizationMethod()
-    {
-        return static::AUTHORIZATION_METHOD_QUERY_STRING_V2;
-    }
+	public function requestAccessToken($code, $state = null)
+	{
+		if (null !== $state) {
+			$this->validateAuthorizationState($state);
+		}
 
-    /**
-     * {@inheritdoc}
-     */
-    protected function parseAccessTokenResponse($responseBody)
-    {
-        $data = json_decode($responseBody, true);
+		$bodyParams = array(
+			'code'       => $code,
+			'appid'      => $this->credentials->getConsumerId(),
+			'secret'     => $this->credentials->getConsumerSecret(),
+			'grant_type' => 'authorization_code',
+		);
 
-        if (null === $data || !is_array($data)) {
-            throw new TokenResponseException('Unable to parse response.');
-        } elseif (isset($data['error'])) {
-            throw new TokenResponseException('Error in retrieving token: "' . $data['error'] . '"');
-        }
+		$responseBody = $this->httpClient->retrieveResponse(
+			$this->getAccessTokenEndpoint(),
+			$bodyParams,
+			$this->getExtraOAuthHeaders()
+		);
 
-        $token = new StdOAuth2Token();
-        $token->setAccessToken($data['access_token']);
-        $token->setLifeTime($data['expires_in']);
+		$token = $this->parseAccessTokenResponse($responseBody);
+		$this->storage->storeAccessToken($this->service(), $token);
 
-        if (isset($data['refresh_token'])) {
-            $token->setRefreshToken($data['refresh_token']);
-            unset($data['refresh_token']);
-        }
+		return $token;
+	}
 
-        unset($data['access_token']);
-        unset($data['expires_in']);
+	public function getAuthorizationUri(array $additionalParameters = array())
+	{
+		$parameters = array_merge(
+			$additionalParameters,
+			array(
+				'type'          => 'web_server',
+				'appid'         => $this->credentials->getConsumerId(),
+				'redirect_uri'  => $this->credentials->getCallbackUrl(),
+				'response_type' => 'code',
+			)
+		);
 
-        $token->setExtraParams($data);
+		$parameters['scope'] = implode(' ', $this->scopes);
 
-        return $token;
-    }
+		if ($this->needsStateParameterInAuthUrl()) {
+			if (!isset($parameters['state'])) {
+				$parameters['state'] = $this->generateAuthorizationState();
+			}
+			$this->storeAuthorizationState($parameters['state']);
+		}
+
+		// Build the url
+		$url = clone $this->getAuthorizationEndpoint();
+		foreach ($parameters as $key => $val) {
+			$url->addToQuery($key, $val);
+		}
+		$url->setFragment('wechat_redirect');
+
+		return $url;
+	}
+
+	public function refreshAccessToken(TokenInterface $token)
+	{
+		$refreshToken = $token->getRefreshToken();
+
+		if (empty($refreshToken)) {
+			throw new MissingRefreshTokenException();
+		}
+
+		$parameters = array(
+			'grant_type'    => 'refresh_token',
+			'appid'         => $this->credentials->getConsumerId(),
+			'refresh_token' => $refreshToken,
+		);
+
+		$responseBody = $this->httpClient->retrieveResponse(
+			$this->getAccessTokenEndpoint(),
+			$parameters,
+			$this->getExtraOAuthHeaders()
+		);
+		$token        = $this->parseAccessTokenResponse($responseBody);
+		$this->storage->storeAccessToken($this->service(), $token);
+
+		return $token;
+	}
+
+	/**
+	 * {@inheritdoc}
+	 */
+	protected function getAuthorizationMethod()
+	{
+		return static::AUTHORIZATION_METHOD_QUERY_STRING;
+	}
+
+	/**
+	 * {@inheritdoc}
+	 */
+	protected function parseAccessTokenResponse($responseBody)
+	{
+		$data = json_decode($responseBody, true);
+
+		if (null === $data || !is_array($data)) {
+			throw new TokenResponseException('Unable to parse response.');
+		} elseif (isset($data['error'])) {
+			throw new TokenResponseException('Error in retrieving token: "' . $data['error'] . '"');
+		}
+
+		$token = new StdOAuth2Token();
+		$token->setAccessToken($data['access_token']);
+		$token->setLifeTime($data['expires_in']);
+
+		if (isset($data['refresh_token'])) {
+			$token->setRefreshToken($data['refresh_token']);
+			unset($data['refresh_token']);
+		}
+
+		unset($data['access_token']);
+		unset($data['expires_in']);
+
+		$token->setExtraParams($data);
+		return $token;
+	}
 }
