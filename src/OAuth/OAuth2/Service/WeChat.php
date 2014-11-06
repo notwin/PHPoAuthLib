@@ -16,6 +16,8 @@ use OAuth\OAuth2\Token\StdOAuth2Token;
 class WeChat extends AbstractService
 {
 
+	const SCOPE_SNSAPI_BASE = 'snsapi_base';
+
 	/**
 	 * {@inheritdoc}
 	 */
@@ -30,20 +32,6 @@ class WeChat extends AbstractService
 	public function getAccessTokenEndpoint()
 	{
 		return new Uri('https://api.weixin.qq.com/sns/oauth2/access_token');
-	}
-
-	public function __construct(
-		CredentialsInterface $credentials,
-		ClientInterface $httpClient,
-		TokenStorageInterface $storage,
-		$scopes = array(),
-		UriInterface $baseApiUri = null
-	) {
-		parent::__construct($credentials, $httpClient, $storage, $scopes, $baseApiUri);
-
-		if (null === $baseApiUri) {
-			$this->baseApiUri = new Uri('https://api.weixin.qq.com/sns/');
-		}
 	}
 
 	public function requestAccessToken($code, $state = null)
@@ -160,6 +148,7 @@ class WeChat extends AbstractService
 		unset($data['expires_in']);
 
 		$token->setExtraParams($data);
+
 		return $token;
 	}
 }
