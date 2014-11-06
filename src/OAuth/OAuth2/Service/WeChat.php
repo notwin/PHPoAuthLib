@@ -16,7 +16,7 @@ use OAuth\Common\Http\Uri\UriInterface;
  * @author Antoine Corcy <contact@sbin.dk>
  * @link http://developer.linkedin.com/documents/authentication
  */
-class Linkedin extends AbstractService
+class WeChat extends AbstractService
 {
     /**
      * Defined scopes
@@ -42,7 +42,7 @@ class Linkedin extends AbstractService
         parent::__construct($credentials, $httpClient, $storage, $scopes, $baseApiUri, true);
 
         if (null === $baseApiUri) {
-            $this->baseApiUri = new Uri('https://api.linkedin.com/v1/');
+            $this->baseApiUri = new Uri('https://open.weixin.qq.com/');
         }
     }
 
@@ -51,7 +51,7 @@ class Linkedin extends AbstractService
      */
     public function getAuthorizationEndpoint()
     {
-        return new Uri('https://www.linkedin.com/uas/oauth2/authorization');
+        return new Uri('https://open.weixin.qq.com/connect/oauth2/authorize');
     }
 
     /**
@@ -59,7 +59,7 @@ class Linkedin extends AbstractService
      */
     public function getAccessTokenEndpoint()
     {
-        return new Uri('https://www.linkedin.com/uas/oauth2/accessToken');
+        return new Uri('https://api.weixin.qq.com/sns/oauth2/access_token');
     }
 
     /**
