@@ -76,7 +76,6 @@ class WeChat extends AbstractService
 		$parameters = array_merge(
 			$additionalParameters,
 			array(
-				'type'          => 'web_server',
 				'appid'         => $this->credentials->getConsumerId(),
 				'redirect_uri'  => $this->credentials->getCallbackUrl(),
 				'response_type' => 'code',
