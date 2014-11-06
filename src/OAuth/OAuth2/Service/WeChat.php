@@ -10,13 +10,14 @@ use OAuth\OAuth2\Token\StdOAuth2Token;
 /**
  * Linkedin service.
  *
- * @author Antoine Corcy <contact@sbin.dk>
+ * @author Antoine Corcy <www@sbin.dk>
  * @link   http://developer.linkedin.com/documents/authentication
  */
 class WeChat extends AbstractService
 {
 
 	const SCOPE_SNSAPI_BASE = 'snsapi_base';
+
 
 	/**
 	 * {@inheritdoc}
