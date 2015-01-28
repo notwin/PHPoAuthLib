@@ -17,6 +17,7 @@ class WeChat extends AbstractService
 {
 
 	const SCOPE_SNSAPI_BASE = 'snsapi_base';
+    	const SCOPE_SNSAPI_LOGIN = 'snsapi_login';
 
 
 	/**
@@ -24,7 +25,14 @@ class WeChat extends AbstractService
 	 */
 	public function getAuthorizationEndpoint()
 	{
-		return new Uri('https://open.weixin.qq.com/connect/oauth2/authorize');
+		#return new Uri('https://open.weixin.qq.com/connect/oauth2/authorize');
+        	#return new Uri('https://open.weixin.qq.com/connect/qrconnect');
+        	$user_agent = $_SERVER['HTTP_USER_AGENT'];
+        	if (strpos($user_agent, 'MicroMessenger') === false) {
+            		return new Uri('https://open.weixin.qq.com/connect/qrconnect');
+        	} else {
+            		return new Uri('https://open.weixin.qq.com/connect/oauth2/authorize');
+        	}
 	}
 
 	/**
@@ -34,6 +42,27 @@ class WeChat extends AbstractService
 	{
 		return new Uri('https://api.weixin.qq.com/sns/oauth2/access_token');
 	}
+
+    	public function getUserInfoEndpoint()
+    	{
+        	return new Uri('https://api.weixin.qq.com/sns/userinfo');
+    	}
+
+    	public function requestUserInfo($access_token,$openid)
+    	{
+        	$bodyParams = array(
+            		'access_token' => $access_token,
+            		'openid'       => $openid,
+            		'lang'     => 'zh_CN'
+        	);
+
+        	$responseBody = $this->httpClient->retrieveResponse(
+            		$this->getUserInfoEndpoint(),
+            		$bodyParams,
+            		$this->getExtraOAuthHeaders()
+        	);
+        	return json_decode($responseBody,true);
+    	}
 
 	public function requestAccessToken($code, $state = null)
 	{
@@ -152,4 +181,6 @@ class WeChat extends AbstractService
 
 		return $token;
 	}
+
+
 }
